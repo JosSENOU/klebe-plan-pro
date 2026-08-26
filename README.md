@@ -1,12 +1,12 @@
-# Josephine's Premium React Suite
+# Keira's React Tasks
 
-réalise la partie de josephine avec un style premium en react
+continue avec la tache de keira en react et avec les meme styles
 
 This project was built with [Lovable](https://lovable.dev).
 
 ## Build with Lovable
 
-Continue developing this project in the [Lovable editor](https://lovable.dev/projects/d2f9f4a8-6ae9-4bf0-8973-51149f3507e4).
+Continue developing this project in the [Lovable editor](https://lovable.dev/projects/14c0fabf-0f80-433c-b046-a65cea6328e3).
 
 - **Ship faster**: describe what you want to build and Lovable handles the code.
 - **Stay in sync**: every change made in Lovable is committed straight to this repository.

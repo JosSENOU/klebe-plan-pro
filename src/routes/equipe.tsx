@@ -1,0 +1,342 @@
+import { createFileRoute } from "@tanstack/react-router";
+import { MoreHorizontal, Plus, ShieldCheck, UserPlus, Users, X } from "lucide-react";
+import { useState } from "react";
+
+import { AppShell } from "@/components/app-shell";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+
+export const Route = createFileRoute("/equipe")({
+  head: () => ({
+    meta: [
+      { title: "Gestion d’équipe | Klébé Plan Pro" },
+      {
+        name: "description",
+        content:
+          "Ajoutez ou retirez des assistantes et gérez leurs niveaux d’accès dans Klébé Plan Pro.",
+      },
+      { property: "og:title", content: "Gestion d’équipe | Klébé Plan Pro" },
+      {
+        property: "og:description",
+        content: "Contrôlez qui peut créer et suivre les rendez-vous du DG.",
+      },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
+    ],
+  }),
+  component: TeamPage,
+});
+
+type Access = "Administratrice" | "Éditrice" | "Lecture seule";
+
+type Member = {
+  id: number;
+  name: string;
+  email: string;
+  role: string;
+  initials: string;
+  access: Access;
+  tone: "emerald" | "amber" | "coral" | "blue";
+};
+
+const seats = 5;
+
+const initialMembers: Member[] = [
+  {
+    id: 1,
+    name: "Josephine Senou",
+    email: "josephine@klebe.pro",
+    role: "Assistante de direction",
+    initials: "JS",
+    access: "Administratrice",
+    tone: "emerald",
+  },
+  {
+    id: 2,
+    name: "Shalom Ahouandjinou",
+    email: "shalom@klebe.pro",
+    role: "Assistante rendez-vous",
+    initials: "SA",
+    access: "Éditrice",
+    tone: "blue",
+  },
+  {
+    id: 3,
+    name: "Keira Dossou",
+    email: "keira@klebe.pro",
+    role: "Assistante accès & quota",
+    initials: "KD",
+    access: "Éditrice",
+    tone: "amber",
+  },
+];
+
+const tones = ["emerald", "amber", "coral", "blue"] as const;
+
+function TeamPage() {
+  const [members, setMembers] = useState(initialMembers);
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [access, setAccess] = useState<Access>("Éditrice");
+  const [error, setError] = useState<string | null>(null);
+
+  const addMember = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (name.trim().length < 3 || !email.includes("@")) {
+      setError("Renseignez un nom complet et une adresse e-mail valide.");
+      return;
+    }
+    if (members.length >= seats) {
+      setError("Toutes les places de votre forfait sont occupées.");
+      return;
+    }
+    const initials = name
+      .trim()
+      .split(/\s+/)
+      .slice(0, 2)
+      .map((part) => part[0]?.toLocaleUpperCase("fr") ?? "")
+      .join("");
+    setMembers((current) => [
+      ...current,
+      {
+        id: Date.now(),
+        name: name.trim(),
+        email: email.trim(),
+        role: "Assistante",
+        initials,
+        access,
+        tone: tones[current.length % tones.length]!,
+      },
+    ]);
+    setName("");
+    setEmail("");
+    setAccess("Éditrice");
+    setError(null);
+    setInviteOpen(false);
+  };
+
+  const removeMember = (id: number) => {
+    setMembers((current) => current.filter((member) => member.id !== id));
+  };
+
+  const changeAccess = (id: number, next: Access) => {
+    setMembers((current) =>
+      current.map((member) => (member.id === id ? { ...member, access: next } : member)),
+    );
+  };
+
+  return (
+    <AppShell
+      breadcrumb="Équipe"
+      actions={
+        <Button className="h-10 shadow-brand" onClick={() => setInviteOpen((open) => !open)}>
+          <Plus />
+          <span className="hidden sm:inline">Inviter une assistante</span>
+          <span className="sm:hidden">Inviter</span>
+        </Button>
+      }
+    >
+      <div className="mx-auto max-w-[1480px] px-5 py-8 md:px-8 lg:px-12 lg:py-10">
+        <section className="mb-8">
+          <p className="mb-2 text-xs font-semibold uppercase text-primary">Administration</p>
+          <h1 className="font-display text-3xl font-semibold md:text-4xl">Gestion d’équipe</h1>
+          <p className="mt-2 text-sm text-muted-foreground md:text-base">
+            Ajoutez ou retirez des assistantes et ajustez leurs niveaux d’accès.
+          </p>
+        </section>
+
+        <section className="mb-6 grid gap-3 sm:grid-cols-3">
+          <StatCard label="Membres actifs" value={String(members.length).padStart(2, "0")} detail={`Sur ${seats} places incluses`} icon={Users} tone="primary" />
+          <StatCard
+            label="Administratrices"
+            value={String(members.filter((m) => m.access === "Administratrice").length).padStart(2, "0")}
+            detail="Accès complet au tableau de bord"
+            icon={ShieldCheck}
+            tone="success"
+          />
+          <StatCard
+            label="Places disponibles"
+            value={String(Math.max(seats - members.length, 0)).padStart(2, "0")}
+            detail="Ajoutez une assistante à tout moment"
+            icon={UserPlus}
+            tone="blue"
+          />
+        </section>
+
+        {inviteOpen && (
+          <section className="mb-6 rounded-lg border border-border bg-card p-5 shadow-surface md:p-6">
+            <div className="mb-5 flex items-start justify-between">
+              <div>
+                <h2 className="font-display text-xl font-semibold">Inviter une assistante</h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Elle recevra un e-mail d’activation pour créer son mot de passe.
+                </p>
+              </div>
+              <Button variant="ghost" size="icon" aria-label="Fermer" onClick={() => setInviteOpen(false)}>
+                <X />
+              </Button>
+            </div>
+            <form onSubmit={addMember} className="grid gap-4 md:grid-cols-[1fr_1fr_auto] md:items-end">
+              <div className="space-y-2">
+                <Label htmlFor="member-name">Nom complet</Label>
+                <Input
+                  id="member-name"
+                  value={name}
+                  onChange={(event) => setName(event.target.value)}
+                  placeholder="Ex. Aïcha Mensah"
+                  className="h-11 bg-muted/40 shadow-none"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="member-email">Adresse e-mail</Label>
+                <Input
+                  id="member-email"
+                  type="email"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  placeholder="aicha@entreprise.com"
+                  className="h-11 bg-muted/40 shadow-none"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="member-access">Niveau d’accès</Label>
+                <select
+                  id="member-access"
+                  value={access}
+                  onChange={(event) => setAccess(event.target.value as Access)}
+                  className="h-11 w-full rounded-md border border-input bg-muted/40 px-3 text-sm text-foreground outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40 md:w-48"
+                >
+                  <option value="Administratrice">Administratrice</option>
+                  <option value="Éditrice">Éditrice</option>
+                  <option value="Lecture seule">Lecture seule</option>
+                </select>
+              </div>
+              {error && (
+                <p className="rounded-md bg-destructive/10 px-3 py-2 text-xs font-medium text-destructive md:col-span-3">
+                  {error}
+                </p>
+              )}
+              <div className="md:col-span-3">
+                <Button type="submit" className="h-11 shadow-brand">
+                  <UserPlus /> Envoyer l’invitation
+                </Button>
+              </div>
+            </form>
+          </section>
+        )}
+
+        <section className="overflow-hidden rounded-lg border border-border bg-card shadow-surface">
+          <div className="flex flex-col justify-between gap-3 border-b border-border p-5 sm:flex-row sm:items-center md:p-6">
+            <div>
+              <h2 className="font-display text-xl font-semibold">Membres de l’équipe</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Les assistantes listées ici peuvent accéder à l’agenda du DG.
+              </p>
+            </div>
+            <span className="w-fit rounded-full bg-success-soft px-3 py-1 text-xs font-semibold text-success-foreground">
+              {members.length} / {seats} places
+            </span>
+          </div>
+
+          <div className="divide-y divide-border">
+            {members.length > 0 ? (
+              members.map((member) => (
+                <article
+                  key={member.id}
+                  className="flex flex-col gap-4 px-5 py-5 transition-colors hover:bg-muted/25 sm:flex-row sm:items-center md:px-6"
+                >
+                  <div className={`avatar avatar-${member.tone}`}>{member.initials}</div>
+                  <div className="min-w-0 flex-1">
+                    <h3 className="truncate text-sm font-semibold text-card-foreground">{member.name}</h3>
+                    <p className="mt-1 truncate text-xs text-muted-foreground">
+                      {member.email} · {member.role}
+                    </p>
+                  </div>
+                  <span
+                    className={`w-fit rounded-full px-3 py-1 text-xs font-medium ${member.access === "Administratrice" ? "status-confirmed" : member.access === "Éditrice" ? "status-upcoming" : "status-completed"}`}
+                  >
+                    {member.access}
+                  </span>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="sm:justify-self-end"
+                        aria-label={`Gérer ${member.name}`}
+                      >
+                        <MoreHorizontal />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-52">
+                      <DropdownMenuItem onClick={() => changeAccess(member.id, "Administratrice")}>
+                        Passer administratrice
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => changeAccess(member.id, "Éditrice")}>
+                        Passer éditrice
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => changeAccess(member.id, "Lecture seule")}>
+                        Limiter à la lecture
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => removeMember(member.id)}>
+                        Retirer de l’équipe
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </article>
+              ))
+            ) : (
+              <div className="py-16 text-center">
+                <Users className="mx-auto mb-3 size-6 text-muted-foreground" />
+                <p className="font-medium">Aucune assistante dans l’équipe</p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Invitez une assistante pour lui donner accès au tableau de bord.
+                </p>
+              </div>
+            )}
+          </div>
+
+          <div className="flex items-center justify-between border-t border-border bg-muted/30 px-5 py-4 text-xs text-muted-foreground md:px-6">
+            <span>{members.length} membre(s) affiché(s)</span>
+            <span>Permissions synchronisées avec l’API équipe</span>
+          </div>
+        </section>
+      </div>
+    </AppShell>
+  );
+}
+
+function StatCard({
+  label,
+  value,
+  detail,
+  icon: Icon,
+  tone,
+}: {
+  label: string;
+  value: string;
+  detail: string;
+  icon: typeof Users;
+  tone: "primary" | "blue" | "success" | "amber";
+}) {
+  return (
+    <article className="rounded-lg border border-border bg-card p-5 shadow-surface transition-transform duration-200 hover:-translate-y-0.5">
+      <div className="mb-5 flex items-start justify-between">
+        <span className="text-sm font-medium text-muted-foreground">{label}</span>
+        <span className={`metric-icon metric-icon-${tone}`}>
+          <Icon className="size-[18px]" />
+        </span>
+      </div>
+      <p className="font-display text-3xl font-semibold text-card-foreground">{value}</p>
+      <p className="mt-1 text-xs text-muted-foreground">{detail}</p>
+    </article>
+  );
+}
