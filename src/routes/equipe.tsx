@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { MoreHorizontal, Plus, ShieldCheck, UserPlus, Users, X } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,15 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  type Access,
+  type Member,
+  SEAT_LIMIT,
+  inviteMember,
+  listMembers,
+  removeMember as removeMemberRequest,
+  updateMemberAccess,
+} from "@/lib/api/team";
 
 export const Route = createFileRoute("/equipe")({
   head: () => ({
@@ -34,103 +43,67 @@ export const Route = createFileRoute("/equipe")({
   component: TeamPage,
 });
 
-type Access = "Administratrice" | "Éditrice" | "Lecture seule";
-
-type Member = {
-  id: number;
-  name: string;
-  email: string;
-  role: string;
-  initials: string;
-  access: Access;
-  tone: "emerald" | "amber" | "coral" | "blue";
-};
-
-const seats = 5;
-
-const initialMembers: Member[] = [
-  {
-    id: 1,
-    name: "Josephine Senou",
-    email: "josephine@klebe.pro",
-    role: "Assistante de direction",
-    initials: "JS",
-    access: "Administratrice",
-    tone: "emerald",
-  },
-  {
-    id: 2,
-    name: "Shalom Ahouandjinou",
-    email: "shalom@klebe.pro",
-    role: "Assistante rendez-vous",
-    initials: "SA",
-    access: "Éditrice",
-    tone: "blue",
-  },
-  {
-    id: 3,
-    name: "Keira Dossou",
-    email: "keira@klebe.pro",
-    role: "Assistante accès & quota",
-    initials: "KD",
-    access: "Éditrice",
-    tone: "amber",
-  },
-];
-
-const tones = ["emerald", "amber", "coral", "blue"] as const;
-
 function TeamPage() {
-  const [members, setMembers] = useState(initialMembers);
+  const [members, setMembers] = useState<Member[]>([]);
+  const [loading, setLoading] = useState(true);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [access, setAccess] = useState<Access>("Éditrice");
   const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
-  const addMember = (event: React.FormEvent<HTMLFormElement>) => {
+  useEffect(() => {
+    let cancelled = false;
+    listMembers().then((result) => {
+      if (!cancelled) {
+        setMembers(result);
+        setLoading(false);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const addMember = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (name.trim().length < 3 || !email.includes("@")) {
-      setError("Renseignez un nom complet et une adresse e-mail valide.");
-      return;
+    setSubmitting(true);
+    try {
+      const member = await inviteMember({ name, email, access });
+      setMembers((current) => [...current, member]);
+      setName("");
+      setEmail("");
+      setAccess("Éditrice");
+      setError(null);
+      setInviteOpen(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Une erreur inattendue est survenue.");
+    } finally {
+      setSubmitting(false);
     }
-    if (members.length >= seats) {
-      setError("Toutes les places de votre forfait sont occupées.");
-      return;
-    }
-    const initials = name
-      .trim()
-      .split(/\s+/)
-      .slice(0, 2)
-      .map((part) => part[0]?.toLocaleUpperCase("fr") ?? "")
-      .join("");
-    setMembers((current) => [
-      ...current,
-      {
-        id: Date.now(),
-        name: name.trim(),
-        email: email.trim(),
-        role: "Assistante",
-        initials,
-        access,
-        tone: tones[current.length % tones.length]!,
-      },
-    ]);
-    setName("");
-    setEmail("");
-    setAccess("Éditrice");
-    setError(null);
-    setInviteOpen(false);
   };
 
-  const removeMember = (id: number) => {
+  const removeMember = async (id: number) => {
+    const previous = members;
     setMembers((current) => current.filter((member) => member.id !== id));
+    try {
+      await removeMemberRequest(id);
+    } catch {
+      setMembers(previous);
+    }
   };
 
-  const changeAccess = (id: number, next: Access) => {
+  const changeAccess = async (id: number, next: Access) => {
+    const previous = members;
     setMembers((current) =>
       current.map((member) => (member.id === id ? { ...member, access: next } : member)),
     );
+    try {
+      await updateMemberAccess(id, next);
+    } catch {
+      setMembers(previous);
+    }
   };
 
   return (
@@ -154,17 +127,26 @@ function TeamPage() {
         </section>
 
         <section className="mb-6 grid gap-3 sm:grid-cols-3">
-          <StatCard label="Membres actifs" value={String(members.length).padStart(2, "0")} detail={`Sur ${seats} places incluses`} icon={Users} tone="primary" />
+          <StatCard
+            label="Membres actifs"
+            value={String(members.length).padStart(2, "0")}
+            detail={`Sur ${SEAT_LIMIT} places incluses`}
+            icon={Users}
+            tone="primary"
+          />
           <StatCard
             label="Administratrices"
-            value={String(members.filter((m) => m.access === "Administratrice").length).padStart(2, "0")}
+            value={String(members.filter((m) => m.access === "Administratrice").length).padStart(
+              2,
+              "0",
+            )}
             detail="Accès complet au tableau de bord"
             icon={ShieldCheck}
             tone="success"
           />
           <StatCard
             label="Places disponibles"
-            value={String(Math.max(seats - members.length, 0)).padStart(2, "0")}
+            value={String(Math.max(SEAT_LIMIT - members.length, 0)).padStart(2, "0")}
             detail="Ajoutez une assistante à tout moment"
             icon={UserPlus}
             tone="blue"
@@ -180,11 +162,19 @@ function TeamPage() {
                   Elle recevra un e-mail d’activation pour créer son mot de passe.
                 </p>
               </div>
-              <Button variant="ghost" size="icon" aria-label="Fermer" onClick={() => setInviteOpen(false)}>
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="Fermer"
+                onClick={() => setInviteOpen(false)}
+              >
                 <X />
               </Button>
             </div>
-            <form onSubmit={addMember} className="grid gap-4 md:grid-cols-[1fr_1fr_auto] md:items-end">
+            <form
+              onSubmit={addMember}
+              className="grid gap-4 md:grid-cols-[1fr_1fr_auto] md:items-end"
+            >
               <div className="space-y-2">
                 <Label htmlFor="member-name">Nom complet</Label>
                 <Input
@@ -225,8 +215,8 @@ function TeamPage() {
                 </p>
               )}
               <div className="md:col-span-3">
-                <Button type="submit" className="h-11 shadow-brand">
-                  <UserPlus /> Envoyer l’invitation
+                <Button type="submit" disabled={submitting} className="h-11 shadow-brand">
+                  <UserPlus /> {submitting ? "Envoi…" : "Envoyer l’invitation"}
                 </Button>
               </div>
             </form>
@@ -242,12 +232,16 @@ function TeamPage() {
               </p>
             </div>
             <span className="w-fit rounded-full bg-success-soft px-3 py-1 text-xs font-semibold text-success-foreground">
-              {members.length} / {seats} places
+              {members.length} / {SEAT_LIMIT} places
             </span>
           </div>
 
           <div className="divide-y divide-border">
-            {members.length > 0 ? (
+            {loading ? (
+              <div className="py-16 text-center text-sm text-muted-foreground">
+                Chargement de l’équipe…
+              </div>
+            ) : members.length > 0 ? (
               members.map((member) => (
                 <article
                   key={member.id}
@@ -255,7 +249,9 @@ function TeamPage() {
                 >
                   <div className={`avatar avatar-${member.tone}`}>{member.initials}</div>
                   <div className="min-w-0 flex-1">
-                    <h3 className="truncate text-sm font-semibold text-card-foreground">{member.name}</h3>
+                    <h3 className="truncate text-sm font-semibold text-card-foreground">
+                      {member.name}
+                    </h3>
                     <p className="mt-1 truncate text-xs text-muted-foreground">
                       {member.email} · {member.role}
                     </p>

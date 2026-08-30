@@ -7,9 +7,11 @@ import {
   Sparkles,
   TrendingUp,
 } from "lucide-react";
+import { useEffect, useState } from "react";
 
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
+import { type QuotaSummary, getQuotaSummary } from "@/lib/api/quota";
 
 export const Route = createFileRoute("/quota")({
   head: () => ({
@@ -32,25 +34,33 @@ export const Route = createFileRoute("/quota")({
   component: QuotaPage,
 });
 
-const included = 500;
-const used = 132;
-const remaining = included - used;
-const usedPercent = Math.round((used / included) * 100);
-
-const history = [
-  { label: "Rappels la veille (18:00)", count: 54, tone: "primary" as const },
-  { label: "Rappels du jour J (08:00)", count: 51, tone: "blue" as const },
-  { label: "Rappels imminents (15 min avant)", count: 24, tone: "amber" as const },
-  { label: "Confirmations reçues", count: 3, tone: "success" as const },
-];
-
-const packs = [
-  { name: "Pack 250 messages", price: "15 000 FCFA", detail: "Idéal pour un mois chargé" },
-  { name: "Pack 500 messages", price: "27 000 FCFA", detail: "Le plus utilisé", highlight: true },
-  { name: "Pack 1 000 messages", price: "48 000 FCFA", detail: "Pour plusieurs DG" },
-];
-
 function QuotaPage() {
+  const [summary, setSummary] = useState<QuotaSummary | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    getQuotaSummary().then((result) => {
+      if (!cancelled) setSummary(result);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (!summary) {
+    return (
+      <AppShell breadcrumb="Quota">
+        <div className="mx-auto max-w-[1480px] px-5 py-16 text-center text-sm text-muted-foreground md:px-8 lg:px-12">
+          Chargement du quota…
+        </div>
+      </AppShell>
+    );
+  }
+
+  const { included, used, breakdown: history, packs } = summary;
+  const remaining = included - used;
+  const usedPercent = Math.round((used / included) * 100);
+
   return (
     <AppShell
       breadcrumb="Quota"
@@ -68,7 +78,8 @@ function QuotaPage() {
             <p className="mb-2 text-xs font-semibold uppercase text-primary">Forfait Essentiel</p>
             <h1 className="font-display text-3xl font-semibold md:text-4xl">Messages restants</h1>
             <p className="mt-2 text-sm text-muted-foreground md:text-base">
-              Période du 1<sup>er</sup> au 31 août 2026 · renouvellement le 1<sup>er</sup> septembre.
+              Période du 1<sup>er</sup> au 31 août 2026 · renouvellement le 1<sup>er</sup>{" "}
+              septembre.
             </p>
           </div>
           <div className="flex items-center gap-2 rounded-md border border-success-border bg-success-soft px-3 py-2 text-xs font-medium text-success-foreground">
@@ -81,8 +92,12 @@ function QuotaPage() {
           <article className="rounded-lg border border-border bg-card p-6 shadow-surface">
             <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
               <div>
-                <p className="text-sm font-medium text-muted-foreground">Messages restants ce mois</p>
-                <p className="mt-2 font-display text-5xl font-semibold text-card-foreground">{remaining}</p>
+                <p className="text-sm font-medium text-muted-foreground">
+                  Messages restants ce mois
+                </p>
+                <p className="mt-2 font-display text-5xl font-semibold text-card-foreground">
+                  {remaining}
+                </p>
                 <p className="mt-1 text-xs text-muted-foreground">
                   sur {included} messages inclus dans votre forfait
                 </p>
@@ -106,23 +121,44 @@ function QuotaPage() {
             <div className="mt-6 flex items-start gap-3 rounded-md border border-border bg-muted/30 p-4 text-xs text-muted-foreground">
               <AlertTriangle className="mt-0.5 size-4 shrink-0 text-notification" />
               <p>
-                À l’épuisement du quota, l’envoi des rappels WhatsApp est suspendu jusqu’à la recharge
-                ou au renouvellement du forfait. Une alerte est envoyée à 90% de consommation.
+                À l’épuisement du quota, l’envoi des rappels WhatsApp est suspendu jusqu’à la
+                recharge ou au renouvellement du forfait. Une alerte est envoyée à 90% de
+                consommation.
               </p>
             </div>
           </article>
 
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
-            <StatCard label="Envoyés ce mois" value={String(used)} detail="Tous rappels confondus" icon={MessageCircleMore} tone="primary" />
-            <StatCard label="Taux de livraison" value="97,7%" detail="129 messages livrés" icon={Check} tone="success" />
-            <StatCard label="Programmés" value="14" detail="Pour les 7 prochains jours" icon={Clock3} tone="blue" />
+            <StatCard
+              label="Envoyés ce mois"
+              value={String(used)}
+              detail="Tous rappels confondus"
+              icon={MessageCircleMore}
+              tone="primary"
+            />
+            <StatCard
+              label="Taux de livraison"
+              value={`${((summary.deliveredCount / used) * 100).toFixed(1).replace(".", ",")}%`}
+              detail={`${summary.deliveredCount} messages livrés`}
+              icon={Check}
+              tone="success"
+            />
+            <StatCard
+              label="Programmés"
+              value={String(summary.scheduledNext7Days)}
+              detail="Pour les 7 prochains jours"
+              icon={Clock3}
+              tone="blue"
+            />
           </div>
         </section>
 
         <section className="mb-6 overflow-hidden rounded-lg border border-border bg-card shadow-surface">
           <div className="border-b border-border p-5 md:p-6">
             <h2 className="font-display text-xl font-semibold">Répartition de la consommation</h2>
-            <p className="mt-1 text-sm text-muted-foreground">Ce qui consomme votre quota ce mois-ci.</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Ce qui consomme votre quota ce mois-ci.
+            </p>
           </div>
           <div className="divide-y divide-border">
             {history.map((item) => (
@@ -161,7 +197,9 @@ function QuotaPage() {
                     </span>
                   )}
                 </div>
-                <p className="mt-3 font-display text-2xl font-semibold text-card-foreground">{pack.price}</p>
+                <p className="mt-3 font-display text-2xl font-semibold text-card-foreground">
+                  {pack.price}
+                </p>
                 <p className="mt-1 text-xs text-muted-foreground">{pack.detail}</p>
                 <Button
                   variant={pack.highlight ? "default" : "outline"}
